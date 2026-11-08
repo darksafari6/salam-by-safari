@@ -34,6 +34,9 @@ describe('core journeys', () => {
   it('keeps Quran content in its menu, searches, switches translation and saves a place', async () => {
     expect(document.querySelector('.cards')).toBeNull();
     await navigate('#quran');
+    expect(document.querySelectorAll('.mode-card')).toHaveLength(2);
+    expect(document.querySelector('.cards')).toBeNull();
+    await navigate('#quran/read');
     expect(document.querySelectorAll('[data-read-surah]')).toHaveLength(114);
     const search = document.querySelector('#search'); search.value = 'Al-Fatihah'; search.dispatchEvent(new Event('input', { bubbles: true }));
     expect(document.querySelectorAll('[data-read-surah]')).toHaveLength(1);
@@ -52,12 +55,39 @@ describe('core journeys', () => {
     await vi.waitFor(() => expect(document.querySelector('#verse-1-1')).not.toBeNull());
   });
   it('shows Parah results and handles search with no matches', async () => {
-    await navigate('#quran'); click('[data-tab="juz"]');
+    await navigate('#quran/read'); click('[data-tab="juz"]');
     expect(document.querySelectorAll('[data-read-juz]')).toHaveLength(30);
     const search=document.querySelector('#search'); search.value='not a parah'; search.dispatchEvent(new Event('input',{bubbles:true}));
     expect(document.querySelector('.no-results')).not.toBeNull();
     search.value='1'; search.dispatchEvent(new Event('input',{bubbles:true})); click('[data-read-juz="0"]');
     expect(document.querySelector('.verse-meta').textContent).toContain('1:1');
+  });
+  it('opens a surah listening queue, advances and cleans up on navigation', async () => {
+    const play=vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
+    const pause=vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen');
+    expect(document.querySelectorAll('[data-listen-surah]')).toHaveLength(114);
+    click('[data-listen-surah="1"]');
+    await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item')).toHaveLength(7));
+    const audio=document.querySelector('#listen-audio');
+    expect(audio.src).toContain('001001.mp3');
+    expect(play).not.toHaveBeenCalled();
+    click('#play-pause'); expect(play).toHaveBeenCalled();
+    audio.dispatchEvent(new Event('ended'));
+    expect(audio.src).toContain('001002.mp3');
+    click('[data-queue="6"]'); expect(audio.src).toContain('001007.mp3');
+    await navigate('#quran'); expect(pause).toHaveBeenCalled();
+  });
+  it('builds a Parah queue with correct start and end boundaries', async () => {
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen'); click('[data-tab="juz"]');
+    expect(document.querySelectorAll('[data-listen-juz]')).toHaveLength(30);
+    click('[data-listen-juz="1"]');
+    await vi.waitFor(()=>expect(document.querySelector('#listen-audio')).not.toBeNull());
+    expect(document.querySelector('#listen-audio').src).toContain('002142.mp3');
+    expect(document.querySelector('.queue-item:last-child .queue-info small').textContent).toContain('2:252');
   });
   it('opens a saved hadith at the correct pagination and marks missing text', async () => {
     await navigate('#books/bukhari/2');
