@@ -20,3 +20,7 @@ The Books menu uses the 97 numbered subject books in the [Hadith API](https://gi
 The dashboard calculates prayer times locally after an explicit location permission using the MIT-licensed [adhan-js](https://github.com/batoulapps/adhan-js) library. Times are estimates, shown in the device time zone; users can select a calculation method and Asr school and should verify with their local mosque. Coordinates are not stored by Salam. The Hijri date uses the browser's Umm al-Qura calendar and may differ from local moon sightings.
 
 Quran and hadith bookmarks, an explicitly marked Quran reading position, journal entries, tasbih count, reading size and motion preference are saved in local browser storage only (no account, encryption, synchronization or backup). Audio streams individual verses from EveryAyah's Mishary Rashid Alafasy collection and requires an internet connection. Topic links are selected starting points, not exhaustive or scholarly classifications. Focus mode hides translations; it does not create a verified 16-line Mushaf layout.
+
+## Quran read and listen modes
+
+The Quran menu offers separate Read and Listen modes. Listen mode builds a verse-by-verse queue for the selected surah or parah using the same juz boundaries as the reader. It streams Mishary Rashid Alafasy audio from EveryAyah, advances automatically, and stops when leaving the player. Audio availability requires internet access and depends on the external provider; playback starts only after a user action.
