@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { readFile } from 'node:fs/promises';
+import quran from '../src/data/quran.json';
 
 vi.mock('gsap', () => ({ gsap: { from: vi.fn(), to: vi.fn() } }));
 
@@ -20,6 +21,15 @@ beforeEach(async () => {
   Element.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal('requestAnimationFrame', callback => { callback(); return 1; });
   vi.stubGlobal('fetch', vi.fn(async url => {
+    const reciters=[
+      {id:'alafasy',name:'Mishary Rashid Alafasy',style:'murattal',riwayah:'hafs',timingsRevision:2,timingsPath:'timings/alafasy-r2.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/alafasy/{nnn}.mp3','https://archive.org/download/quranpro-mishary-alafasy/{nnn}.mp3']},
+      {id:'husary',name:'Mahmoud Khalil Al-Husary',style:'murattal',riwayah:'hafs',timingsRevision:2,timingsPath:'timings/husary-r2.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/husary/{nnn}.mp3']},
+      {id:'balushi',name:'Hazza Al-Balushi',style:'murattal',riwayah:'hafs',timingsRevision:1,timingsPath:'timings/balushi-r1.json',unavailableSurahs:[2],surahPaths:['https://quranpro-audio.quranpro.workers.dev/balushi/{nnn}.mp3']},
+      {id:'dokali',name:'Qalun reciter',style:'murattal',riwayah:'qalun',timingsRevision:1,timingsPath:'timings/dokali-r1.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/dokali/{nnn}.mp3']}
+    ];
+    if(String(url).endsWith('manifest.json'))return {ok:true,json:async()=>({reciters})};
+    const timing=String(url).match(/timings\/(alafasy|husary|balushi)-r(\d+).json/);
+    if(timing){const unit=timing[1]==='husary'?20000:10000;return {ok:true,json:async()=>({reciter:timing[1],revision:Number(timing[2]),surahs:quran.map(s=>s.verses.map(v=>[v.id,(v.id-1)*unit,v.id*unit]))})};}
     const match = String(url).match(/data\/bukhari\/(\d+)\.json/);
     if (!match) throw Error('Unexpected URL');
     return { ok: true, json: async () => JSON.parse(await readFile(`public/data/bukhari/${match[1]}.json`, 'utf8')) };
@@ -66,17 +76,21 @@ describe('core journeys', () => {
     const play=vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
     const pause=vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
     vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'readyState','get').mockReturnValue(1);
     await navigate('#quran/listen');
     expect(document.querySelectorAll('[data-listen-surah]')).toHaveLength(114);
     click('[data-listen-surah="1"]');
     await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item')).toHaveLength(7));
     const audio=document.querySelector('#listen-audio');
-    expect(audio.src).toContain('001001.mp3');
+    expect(audio.src).toContain('/001.mp3');
+    audio.dispatchEvent(new Event('loadedmetadata'));
     expect(play).not.toHaveBeenCalled();
     click('#play-pause'); expect(play).toHaveBeenCalled();
-    audio.dispatchEvent(new Event('ended'));
-    expect(audio.src).toContain('001002.mp3');
-    click('[data-queue="6"]'); expect(audio.src).toContain('001007.mp3');
+    audio.currentTime=10.2; audio.dispatchEvent(new Event('timeupdate'));
+    expect(audio.src).toContain('/001.mp3');
+    expect(document.querySelector('.track-status').textContent).toContain('1:2');
+    click('[data-queue="6"]'); expect(audio.src).toContain('/001.mp3');
+    expect(audio.currentTime).toBe(60);
     await navigate('#quran'); expect(pause).toHaveBeenCalled();
   });
   it('builds a Parah queue with correct start and end boundaries', async () => {
@@ -85,9 +99,65 @@ describe('core journeys', () => {
     await navigate('#quran/listen'); click('[data-tab="juz"]');
     expect(document.querySelectorAll('[data-listen-juz]')).toHaveLength(30);
     click('[data-listen-juz="1"]');
-    await vi.waitFor(()=>expect(document.querySelector('#listen-audio')).not.toBeNull());
-    expect(document.querySelector('#listen-audio').src).toContain('002142.mp3');
+    await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item').length).toBeGreaterThan(0));
+    const audio=document.querySelector('#listen-audio');expect(audio.src).toContain('/002.mp3');
+    audio.dispatchEvent(new Event('loadedmetadata'));expect(audio.currentTime).toBe(1410);
     expect(document.querySelector('.queue-item:last-child .queue-info small').textContent).toContain('2:252');
+  });
+  it('changes files only at a surah boundary in a multi-surah Parah', async () => {
+    vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen/juz/1');
+    await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item').length).toBeGreaterThan(7));
+    const audio=document.querySelector('#listen-audio');audio.dispatchEvent(new Event('loadedmetadata'));
+    expect(audio.src).toContain('/001.mp3');
+    audio.currentTime=70;audio.dispatchEvent(new Event('timeupdate'));
+    expect(audio.src).toContain('/002.mp3');
+    audio.dispatchEvent(new Event('loadedmetadata'));expect(audio.currentTime).toBe(0);
+    expect(document.querySelector('.track-status').textContent).toContain('2:1');
+  });
+  it('falls back to the matching secondary audio host when the primary fails', async () => {
+    vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen/surah/1');
+    await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item')).toHaveLength(7));
+    const audio=document.querySelector('#listen-audio');
+    expect(audio.src).toContain('quranpro-audio.quranpro.workers.dev');
+    audio.dispatchEvent(new Event('error'));
+    expect(audio.src).toContain('archive.org/download/quranpro-mishary-alafasy/001.mp3');
+    audio.dispatchEvent(new Event('error'));
+    expect(document.querySelector('.track-status').textContent).toMatch(/unavailable/i);
+  });
+  it('changes reciter with matching timings and keeps the selected verse paused', async () => {
+    vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen/surah/1');
+    await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item')).toHaveLength(7));
+    expect(document.querySelectorAll('#reciter-select option')).toHaveLength(3);
+    click('[data-queue="2"]');
+    const select=document.querySelector('#reciter-select');select.value='husary';select.dispatchEvent(new Event('change'));
+    await vi.waitFor(()=>expect(document.querySelector('#listen-audio').src).toContain('/husary/001.mp3'));
+    const audio=document.querySelector('#listen-audio');audio.dispatchEvent(new Event('loadedmetadata'));
+    expect(audio.currentTime).toBe(40);
+    expect(document.querySelector('.track-status').textContent).toContain('1:3');
+    expect(document.querySelector('#queue-reciter').textContent).toContain('Al-Husary');
+    expect(JSON.parse(localStorage.getItem('salam-reciter'))).toBe('husary');
+  });
+  it('disables reciters missing a surah in the selected parah', async () => {
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen/juz/1');
+    await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item').length).toBeGreaterThan(0));
+    expect(document.querySelector('#reciter-select option[value="balushi"]').disabled).toBe(true);
+  });
+  it('shows a retry state when timing metadata is unavailable', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'));
+    await navigate('#quran/listen/surah/1');
+    await vi.waitFor(()=>expect(document.querySelector('.track-status').textContent).toMatch(/retry/i));
+    expect(document.querySelector('#play-pause').getAttribute('aria-label')).toBe('Retry loading');
   });
   it('opens a saved hadith at the correct pagination and marks missing text', async () => {
     await navigate('#books/bukhari/2');
