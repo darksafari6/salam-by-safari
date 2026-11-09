@@ -159,6 +159,26 @@ describe('core journeys', () => {
     await vi.waitFor(()=>expect(document.querySelector('.track-status').textContent).toMatch(/retry/i));
     expect(document.querySelector('#play-pause').getAttribute('aria-label')).toBe('Retry loading');
   });
+  it('offers the Musaad collection with searchable source recordings, without invented verse labels', async () => {
+    const play=vi.spyOn(HTMLMediaElement.prototype,'play').mockResolvedValue();
+    const pause=vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen');
+    expect(document.querySelector('.musaad-feature').getAttribute('href')).toBe('#quran/listen/musaad');
+    click('.musaad-feature');
+    await vi.waitFor(()=>expect(document.querySelectorAll('.musaad-track')).toHaveLength(48));
+    const search=document.querySelector('#musaad-search');search.value='19';search.dispatchEvent(new Event('input',{bubbles:true}));
+    expect(document.querySelectorAll('.musaad-track')).toHaveLength(3);
+    click('[data-track="18"]');
+    const audio=document.querySelector('#musaad-audio');
+    expect(audio.src).toBe('https://media.way2quran.com/abdul-rahman-musaad/hafs-an-asim/019-001.mp3');
+    expect(play).toHaveBeenCalled();
+    expect(document.querySelector('.musaad-notice').textContent).toContain('verse highlighting is not shown');
+    expect(document.querySelector('#musaad-subtitle').textContent).toContain('Recording 1');
+    click('#musaad-next');expect(audio.src).toContain('019-002.mp3');
+    audio.dispatchEvent(new Event('error'));expect(document.querySelector('#musaad-status').textContent).toContain('Audio unavailable');
+    await navigate('#quran/listen');expect(pause).toHaveBeenCalled();
+  });
   it('opens a saved hadith at the correct pagination and marks missing text', async () => {
     await navigate('#books/bukhari/2');
     await vi.waitFor(() => expect(document.querySelectorAll('.hadith-card').length).toBe(10));
