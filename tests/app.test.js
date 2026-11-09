@@ -24,12 +24,15 @@ beforeEach(async () => {
     const reciters=[
       {id:'alafasy',name:'Mishary Rashid Alafasy',style:'murattal',riwayah:'hafs',timingsRevision:2,timingsPath:'timings/alafasy-r2.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/alafasy/{nnn}.mp3','https://archive.org/download/quranpro-mishary-alafasy/{nnn}.mp3']},
       {id:'husary',name:'Mahmoud Khalil Al-Husary',style:'murattal',riwayah:'hafs',timingsRevision:2,timingsPath:'timings/husary-r2.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/husary/{nnn}.mp3']},
+      {id:'husary_muallim',name:'Mahmoud Khalil Al-Husary',style:'muallim',riwayah:'hafs',timingsRevision:2,timingsPath:'timings/husary_muallim-r2.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/husary_muallim/{nnn}.mp3']},
+      ...['abdulbasit','abdulbasit_mujawwad','abdulsamad','minshawi','minshawimujawwad','tablawi'].map(id=>({id,name:id,style:'murattal',riwayah:'hafs',timingsRevision:2,timingsPath:`timings/${id}-r2.json`,unavailableSurahs:[],surahPaths:[`https://quranpro-audio.quranpro.workers.dev/${id}/{nnn}.mp3`]})),
+      {id:'sudais',name:'Abdul Rahman Al-Sudais',style:'murattal',riwayah:'hafs',timingsRevision:2,timingsPath:'timings/sudais-r2.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/sudais/{nnn}.mp3']},
       {id:'balushi',name:'Hazza Al-Balushi',style:'murattal',riwayah:'hafs',timingsRevision:1,timingsPath:'timings/balushi-r1.json',unavailableSurahs:[2],surahPaths:['https://quranpro-audio.quranpro.workers.dev/balushi/{nnn}.mp3']},
       {id:'dokali',name:'Qalun reciter',style:'murattal',riwayah:'qalun',timingsRevision:1,timingsPath:'timings/dokali-r1.json',unavailableSurahs:[],surahPaths:['https://quranpro-audio.quranpro.workers.dev/dokali/{nnn}.mp3']}
     ];
     if(String(url).endsWith('manifest.json'))return {ok:true,json:async()=>({reciters})};
-    const timing=String(url).match(/timings\/(alafasy|husary|balushi)-r(\d+).json/);
-    if(timing){const unit=timing[1]==='husary'?20000:10000;return {ok:true,json:async()=>({reciter:timing[1],revision:Number(timing[2]),surahs:quran.map(s=>s.verses.map(v=>[v.id,(v.id-1)*unit,v.id*unit]))})};}
+    const timing=String(url).match(/timings\/(alafasy|sudais|husary|balushi)-r(\d+).json/);
+    if(timing){const unit=timing[1]==='sudais'?20000:10000;return {ok:true,json:async()=>({reciter:timing[1],revision:Number(timing[2]),surahs:quran.map(s=>s.verses.map(v=>[v.id,(v.id-1)*unit,v.id*unit]))})};}
     const match = String(url).match(/data\/bukhari\/(\d+)\.json/);
     if (!match) throw Error('Unexpected URL');
     return { ok: true, json: async () => JSON.parse(await readFile(`public/data/bukhari/${match[1]}.json`, 'utf8')) };
@@ -138,13 +141,16 @@ describe('core journeys', () => {
     await vi.waitFor(()=>expect(document.querySelectorAll('.queue-item')).toHaveLength(7));
     expect(document.querySelectorAll('#reciter-select option')).toHaveLength(3);
     click('[data-queue="2"]');
-    const select=document.querySelector('#reciter-select');select.value='husary';select.dispatchEvent(new Event('change'));
-    await vi.waitFor(()=>expect(document.querySelector('#listen-audio').src).toContain('/husary/001.mp3'));
+    expect(document.querySelector('#reciter-select option[value="husary"]')).toBeNull();
+    expect(document.querySelector('#reciter-select option[value="husary_muallim"]')).toBeNull();
+    for(const id of ['abdulbasit','abdulbasit_mujawwad','abdulsamad','minshawi','minshawimujawwad','tablawi']) expect(document.querySelector(`#reciter-select option[value="${id}"]`)).toBeNull();
+    const select=document.querySelector('#reciter-select');select.value='sudais';select.dispatchEvent(new Event('change'));
+    await vi.waitFor(()=>expect(document.querySelector('#listen-audio').src).toContain('/sudais/001.mp3'));
     const audio=document.querySelector('#listen-audio');audio.dispatchEvent(new Event('loadedmetadata'));
     expect(audio.currentTime).toBe(40);
     expect(document.querySelector('.track-status').textContent).toContain('1:3');
-    expect(document.querySelector('#queue-reciter').textContent).toContain('Al-Husary');
-    expect(JSON.parse(localStorage.getItem('salam-reciter'))).toBe('husary');
+    expect(document.querySelector('#queue-reciter').textContent).toContain('Al-Sudais');
+    expect(JSON.parse(localStorage.getItem('salam-reciter'))).toBe('sudais');
   });
   it('disables reciters missing a surah in the selected parah', async () => {
     vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(()=>{});
@@ -178,6 +184,25 @@ describe('core journeys', () => {
     click('#musaad-next');expect(audio.src).toContain('019-002.mp3');
     audio.dispatchEvent(new Event('error'));expect(document.querySelector('#musaad-status').textContent).toContain('Audio unavailable');
     await navigate('#quran/listen');expect(pause).toHaveBeenCalled();
+  });
+  it('controls Musaad playback, seeking, volume and player state', async () => {
+    let paused=true;
+    vi.spyOn(HTMLMediaElement.prototype,'paused','get').mockImplementation(()=>paused);
+    vi.spyOn(HTMLMediaElement.prototype,'play').mockImplementation(function(){paused=false;this.dispatchEvent(new Event('play'));return Promise.resolve()});
+    vi.spyOn(HTMLMediaElement.prototype,'pause').mockImplementation(function(){paused=true;this.dispatchEvent(new Event('pause'))});
+    vi.spyOn(HTMLMediaElement.prototype,'load').mockImplementation(()=>{});
+    await navigate('#quran/listen/musaad');
+    expect(document.querySelector('#musaad-toggle').disabled).toBe(true);
+    click('[data-track="0"]');const audio=document.querySelector('#musaad-audio');
+    expect(document.querySelector('#musaad-toggle').getAttribute('aria-label')).toBe('Pause recording');
+    expect(document.querySelector('#musaad-console').classList.contains('is-playing')).toBe(true);
+    Object.defineProperty(audio,'duration',{configurable:true,value:120});audio.dispatchEvent(new Event('loadedmetadata'));
+    const seek=document.querySelector('#musaad-seek');expect(seek.disabled).toBe(false);seek.value=500;seek.dispatchEvent(new Event('input'));
+    expect(audio.currentTime).toBe(60);expect(document.querySelector('#musaad-current').textContent).toBe('1:00');
+    expect(document.querySelector('#musaad-duration').textContent).toBe('2:00');
+    click('#musaad-toggle');expect(document.querySelector('#musaad-toggle').getAttribute('aria-label')).toBe('Play recording');
+    click('#musaad-mute');expect(audio.muted).toBe(true);expect(document.querySelector('#musaad-mute').getAttribute('aria-label')).toBe('Unmute audio');
+    click('#musaad-mute');expect(audio.muted).toBe(false);
   });
   it('opens a saved hadith at the correct pagination and marks missing text', async () => {
     await navigate('#books/bukhari/2');

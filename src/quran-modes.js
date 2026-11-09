@@ -7,7 +7,7 @@ const CONTENT_URL='https://adilbenmoussa.github.io/quran-pro-content/';
 let catalogCache=null;
 const timingCache=new Map();
 function validateReciter(r){
- if(!r || r.riwayah!=='hafs' || !/^[a-z0-9_-]+$/.test(r.id) || typeof r.name!=='string' || !Number.isInteger(r.timingsRevision) || r.timingsPath!==`timings/${r.id}-r${r.timingsRevision}.json` || !Array.isArray(r.surahPaths) || !Array.isArray(r.unavailableSurahs))return false;
+ if(!r || /^(husary|abdulbasit|abdulsamad|minshawi|tablawi)/i.test(r.id || '') || r.riwayah!=='hafs' || !/^[a-z0-9_-]+$/.test(r.id) || typeof r.name!=='string' || !Number.isInteger(r.timingsRevision) || r.timingsPath!==`timings/${r.id}-r${r.timingsRevision}.json` || !Array.isArray(r.surahPaths) || !Array.isArray(r.unavailableSurahs))return false;
  return r.surahPaths.length>0 && r.surahPaths.every(path=>{try{const u=new URL(path.replace('{nnn}','001'));return u.protocol==='https:' && ['quranpro-audio.quranpro.workers.dev','archive.org'].includes(u.hostname) && path.includes('{nnn}')}catch{return false}});
 }
 
